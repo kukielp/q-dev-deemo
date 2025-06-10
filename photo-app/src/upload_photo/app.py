@@ -1,7 +1,6 @@
 import json
 import os
 import uuid
-import base64
 import boto3
 from datetime import datetime
 
@@ -10,53 +9,72 @@ s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
 
 # Get environment variables
-BUCKET_NAME = os.environ.get('PHOTOS_BUCKET_NAME')
-TABLE_NAME = os.environ.get('PHOTOS_TABLE_NAME')
-
-# Get DynamoDB table
-photos_table = dynamodb.Table(TABLE_NAME)
+PHOTOS_TABLE = os.environ.get('PHOTOS_TABLE')
+BUCKET_NAME = os.environ.get('PHOTOS_BUCKET')
 
 def lambda_handler(event, context):
     """
     Lambda function to handle photo uploads.
     
     This function:
-    1. Receives a base64 encoded image and metadata from API Gateway
-    2. Decodes the image
-    3. Uploads the image to S3
+    1. Receives photo data from API Gateway
+    2. Generates a unique ID for the photo
+    3. Uploads the photo to S3
     4. Stores metadata in DynamoDB
+    5. Returns the photo ID and other relevant information
     
     Args:
         event: API Gateway event
         context: Lambda context
         
     Returns:
-        API Gateway response with photoId
+        API Gateway response with photo ID and status
     """
     try:
-        # Parse request body
-        body = json.loads(event.get('body', '{}'))
-        
-        # Extract image data and metadata
-        image_data = body.get('image')
-        file_name = body.get('fileName')
-        
-        # Validate input
-        if not image_data or not file_name:
+        # Parse the request body
+        if 'body' not in event:
             return {
                 'statusCode': 400,
                 'headers': {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 },
-                'body': json.dumps({'error': 'Missing required fields: image and fileName'})
+                'body': json.dumps({'error': 'Missing request body'})
+            }
+            
+        body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
+        
+        # Validate required fields
+        if 'fileName' not in body or 'image' not in body:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'error': 'Missing required fields: fileName and image'})
             }
         
-        # Generate unique photo ID
-        photo_id = str(uuid.uuid4())
+        file_name = body['fileName']
+        image_data = body['image']
         
-        # Decode base64 image
-        image_content = base64.b64decode(image_data)
+        # Check if image data is base64 encoded
+        import base64
+        try:
+            # Try to decode the image data
+            image_binary = base64.b64decode(image_data)
+        except Exception:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'error': 'Invalid image data format'})
+            }
+        
+        # Generate a unique photo ID
+        photo_id = str(uuid.uuid4())
         
         # Generate S3 key
         s3_key = f"{photo_id}/{file_name}"
@@ -65,15 +83,16 @@ def lambda_handler(event, context):
         s3_client.put_object(
             Bucket=BUCKET_NAME,
             Key=s3_key,
-            Body=image_content,
+            Body=image_binary,
             ContentType='image/jpeg'  # Assuming JPEG, could be determined from file extension
         )
         
-        # Current timestamp
+        # Get current timestamp
         timestamp = datetime.utcnow().isoformat()
         
         # Store metadata in DynamoDB
-        photos_table.put_item(
+        table = dynamodb.Table(PHOTOS_TABLE)
+        table.put_item(
             Item={
                 'photoId': photo_id,
                 'fileName': file_name,
@@ -91,20 +110,18 @@ def lambda_handler(event, context):
             },
             'body': json.dumps({
                 'photoId': photo_id,
-                'message': 'Photo uploaded successfully'
+                'fileName': file_name,
+                'uploadTimestamp': timestamp
             })
         }
         
     except Exception as e:
-        # Log error
         print(f"Error: {str(e)}")
-        
-        # Return error response
         return {
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            'body': json.dumps({'error': 'Failed to upload photo'})
+            'body': json.dumps({'error': 'Internal server error'})
         }

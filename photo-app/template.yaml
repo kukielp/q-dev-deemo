@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Serverless Photo Upload Application
+Description: Serverless Photo Application
 
 Parameters:
   Stage:
     Type: String
     Default: dev
     Description: Deployment stage (dev, test, prod)
-
+    
 Globals:
   Function:
     Timeout: 30
@@ -17,9 +17,9 @@ Globals:
       - x86_64
     Environment:
       Variables:
-        PHOTOS_BUCKET_NAME: !Ref PhotosBucket
-        PHOTOS_TABLE_NAME: !Ref PhotosTable
-        PRESIGNED_URL_EXPIRATION: 3600
+        PHOTOS_TABLE: !Ref PhotosTable
+        PHOTOS_BUCKET: !Ref PhotosBucket
+        URL_EXPIRATION: 3600
 
 Resources:
   # API Gateway HTTP API
@@ -37,11 +37,11 @@ Resources:
           - POST
           - OPTIONS
 
-  # S3 Bucket for Photos (Private)
+  # S3 Bucket for Photos
   PhotosBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'photo-app-${AWS::AccountId}-${Stage}'
+      BucketName: !Sub "serverless-photos-${AWS::AccountId}-${Stage}"
       AccessControl: Private
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -52,13 +52,13 @@ Resources:
         Rules:
           - Id: DeleteOldObjects
             Status: Enabled
-            ExpirationInDays: 365  # Optional: Delete photos after 1 year
+            ExpirationInDays: 365  # Optional: delete photos after 1 year
 
   # DynamoDB Table for Photo Metadata
   PhotosTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'Photos-${Stage}'
+      TableName: !Sub "photos-${Stage}"
       BillingMode: PAY_PER_REQUEST  # On-demand capacity
       AttributeDefinitions:
         - AttributeName: photoId
@@ -110,14 +110,14 @@ Resources:
             ApiId: !Ref PhotosApi
 
 Outputs:
-  ApiEndpoint:
+  PhotosApiEndpoint:
     Description: API Gateway endpoint URL
-    Value: !Sub 'https://${PhotosApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/'
+    Value: !Sub "https://${PhotosApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
   
   PhotosBucketName:
-    Description: S3 bucket for storing photos
+    Description: S3 bucket for photos
     Value: !Ref PhotosBucket
   
   PhotosTableName:
-    Description: DynamoDB table for storing photo metadata
+    Description: DynamoDB table for photo metadata
     Value: !Ref PhotosTable

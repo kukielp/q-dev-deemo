@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo App</title>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Q Dev Demo Reinforce Serverless Photo app</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -20,11 +21,10 @@
             flex-direction: column;
             gap: 20px;
         }
-        .card {
+        .section {
             border: 1px solid #ddd;
-            border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 5px;
         }
         .form-group {
             margin-bottom: 15px;
@@ -34,17 +34,15 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input[type="file"], input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        input[type="file"] {
+            display: block;
+            margin-top: 5px;
         }
         button {
             background-color: #4CAF50;
             color: white;
-            border: none;
             padding: 10px 15px;
+            border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
@@ -52,238 +50,170 @@
         button:hover {
             background-color: #45a049;
         }
-        #message {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        #photosList {
+        .photo-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 15px;
         }
         .photo-item {
             border: 1px solid #ddd;
-            border-radius: 8px;
             padding: 10px;
-            text-align: center;
+            border-radius: 5px;
         }
         .photo-item img {
             max-width: 100%;
             height: auto;
-            border-radius: 4px;
         }
-        .photo-info {
+        .error {
+            color: red;
             margin-top: 10px;
-            font-size: 14px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
-    <h1>Photo App</h1>
+    <h1>Q Dev Demo Reinforce Serverless Photo app</h1>
     
     <div class="container">
-        <!-- Upload Section -->
-        <div class="card">
+        <div class="section">
             <h2>Upload Photo</h2>
             <div class="form-group">
-                <label for="photoFile">Select Photo:</label>
-                <input type="file" id="photoFile" accept="image/*">
+                <label for="photo-upload">Select a photo:</label>
+                <input type="file" id="photo-upload" accept="image/*">
             </div>
-            <button id="uploadBtn">Upload Photo</button>
-            <div id="message"></div>
+            <button id="upload-button">Upload Photo</button>
+            <div id="upload-status"></div>
         </div>
         
-        <!-- View Photos Section -->
-        <div class="card">
-            <h2>Your Photos</h2>
-            <div class="form-group">
-                <label for="photoId">Photo ID:</label>
-                <input type="text" id="photoId" placeholder="Enter photo ID to retrieve">
-            </div>
-            <button id="getPhotoBtn">Get Photo</button>
-            <div id="photoResult"></div>
-        </div>
-        
-        <!-- Photos List -->
-        <div class="card">
-            <h2>Recent Uploads</h2>
-            <div id="photosList">
+        <div class="section">
+            <h2>My Photos</h2>
+            <button id="refresh-button">Refresh Photos</button>
+            <div id="photo-list" class="photo-list">
                 <!-- Photos will be displayed here -->
+                <p>No photos available. Upload a photo or refresh the list.</p>
             </div>
         </div>
     </div>
 
     <script>
-        // Configuration - Replace with your API Gateway URL after deployment
-        const API_URL = 'https://your-api-id.execute-api.your-region.amazonaws.com/dev';
+        // Replace with your API Gateway URL
+        const API_URL = 'YOUR_API_GATEWAY_URL';
         
-        // Store recently uploaded photos
-        const recentPhotos = [];
-        
-        // DOM Elements
-        const uploadBtn = document.getElementById('uploadBtn');
-        const getPhotoBtn = document.getElementById('getPhotoBtn');
-        const messageDiv = document.getElementById('message');
-        const photoResultDiv = document.getElementById('photoResult');
-        const photosListDiv = document.getElementById('photosList');
+        // Store uploaded photo IDs in local storage
+        let photoIds = JSON.parse(localStorage.getItem('photoIds') || '[]');
         
         // Upload photo function
-        uploadBtn.addEventListener('click', async () => {
-            const fileInput = document.getElementById('photoFile');
-            const file = fileInput.files[0];
+        document.getElementById('upload-button').addEventListener('click', async () => {
+            const fileInput = document.getElementById('photo-upload');
+            const statusDiv = document.getElementById('upload-status');
             
-            if (!file) {
-                showMessage('Please select a file to upload', 'error');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                statusDiv.innerHTML = '<p class="error">Please select a file to upload</p>';
                 return;
             }
             
+            const file = fileInput.files[0];
+            statusDiv.innerHTML = '<p>Uploading...</p>';
+            
             try {
-                // Show loading message
-                showMessage('Uploading photo...', '');
-                
                 // Read file as base64
-                const base64 = await readFileAsBase64(file);
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
                 
-                // Prepare request body
-                const requestBody = {
-                    image: base64.split(',')[1], // Remove data:image/jpeg;base64, prefix
-                    fileName: file.name
-                };
-                
-                // Send API request
-                const response = await fetch(`${API_URL}/photos`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showMessage(`Photo uploaded successfully! Photo ID: ${data.photoId}`, 'success');
+                reader.onload = async () => {
+                    // Remove the data:image/jpeg;base64, part
+                    const base64Image = reader.result.split(',')[1];
                     
-                    // Add to recent photos
-                    recentPhotos.unshift({
-                        photoId: data.photoId,
+                    // Prepare request body
+                    const requestBody = {
                         fileName: file.name,
-                        uploadTimestamp: new Date().toISOString()
+                        image: base64Image
+                    };
+                    
+                    // Send request to API
+                    const response = await fetch(`${API_URL}/photos`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
                     });
                     
-                    // Update UI
-                    updateRecentPhotos();
+                    const data = await response.json();
                     
-                    // Clear file input
-                    fileInput.value = '';
-                } else {
-                    showMessage(`Error: ${data.error || 'Failed to upload photo'}`, 'error');
-                }
+                    if (response.ok) {
+                        statusDiv.innerHTML = `<p class="success">Photo uploaded successfully! Photo ID: ${data.photoId}</p>`;
+                        
+                        // Store photo ID
+                        photoIds.push(data.photoId);
+                        localStorage.setItem('photoIds', JSON.stringify(photoIds));
+                        
+                        // Refresh photo list
+                        refreshPhotoList();
+                    } else {
+                        statusDiv.innerHTML = `<p class="error">Upload failed: ${data.error || 'Unknown error'}</p>`;
+                    }
+                };
             } catch (error) {
-                console.error('Upload error:', error);
-                showMessage('Error uploading photo. Please try again.', 'error');
+                statusDiv.innerHTML = `<p class="error">Upload failed: ${error.message}</p>`;
             }
         });
         
-        // Get photo function
-        getPhotoBtn.addEventListener('click', async () => {
-            const photoId = document.getElementById('photoId').value.trim();
+        // Refresh photo list function
+        async function refreshPhotoList() {
+            const photoListDiv = document.getElementById('photo-list');
             
-            if (!photoId) {
-                showMessage('Please enter a photo ID', 'error');
+            if (photoIds.length === 0) {
+                photoListDiv.innerHTML = '<p>No photos available. Upload a photo or refresh the list.</p>';
                 return;
             }
+            
+            photoListDiv.innerHTML = '<p>Loading photos...</p>';
             
             try {
-                photoResultDiv.innerHTML = 'Loading...';
+                const photoElements = [];
                 
-                // Send API request
-                const response = await fetch(`${API_URL}/photos/${photoId}`, {
-                    method: 'GET'
-                });
+                for (const photoId of photoIds) {
+                    try {
+                        const response = await fetch(`${API_URL}/photos/${photoId}`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            const photoElement = document.createElement('div');
+                            photoElement.className = 'photo-item';
+                            photoElement.innerHTML = `
+                                <img src="${data.downloadUrl}" alt="${data.fileName}">
+                                <p>${data.fileName}</p>
+                                <p>Uploaded: ${new Date(data.uploadTimestamp).toLocaleString()}</p>
+                            `;
+                            photoElements.push(photoElement);
+                        } else {
+                            console.error(`Failed to load photo ${photoId}: ${data.error}`);
+                        }
+                    } catch (error) {
+                        console.error(`Error loading photo ${photoId}: ${error.message}`);
+                    }
+                }
                 
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Display photo and metadata
-                    photoResultDiv.innerHTML = `
-                        <div class="photo-item">
-                            <img src="${data.downloadUrl}" alt="${data.fileName}">
-                            <div class="photo-info">
-                                <p><strong>File Name:</strong> ${data.fileName}</p>
-                                <p><strong>Upload Date:</strong> ${formatDate(data.uploadTimestamp)}</p>
-                                <p><strong>Photo ID:</strong> ${data.photoId}</p>
-                                <a href="${data.downloadUrl}" target="_blank" download="${data.fileName}">Download</a>
-                            </div>
-                        </div>
-                    `;
+                if (photoElements.length === 0) {
+                    photoListDiv.innerHTML = '<p>No photos available. Upload a photo or refresh the list.</p>';
                 } else {
-                    photoResultDiv.innerHTML = `<div class="error">Error: ${data.error || 'Photo not found'}</div>`;
+                    photoListDiv.innerHTML = '';
+                    photoElements.forEach(element => photoListDiv.appendChild(element));
                 }
             } catch (error) {
-                console.error('Get photo error:', error);
-                photoResultDiv.innerHTML = '<div class="error">Error retrieving photo. Please try again.</div>';
+                photoListDiv.innerHTML = `<p class="error">Failed to load photos: ${error.message}</p>`;
             }
-        });
-        
-        // Helper function to read file as base64
-        function readFileAsBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-                reader.readAsDataURL(file);
-            });
         }
         
-        // Helper function to show messages
-        function showMessage(message, type) {
-            messageDiv.textContent = message;
-            messageDiv.className = type;
-        }
+        // Refresh button click handler
+        document.getElementById('refresh-button').addEventListener('click', refreshPhotoList);
         
-        // Helper function to format date
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleString();
-        }
-        
-        // Update recent photos list
-        function updateRecentPhotos() {
-            if (recentPhotos.length === 0) {
-                photosListDiv.innerHTML = '<p>No recent uploads</p>';
-                return;
-            }
-            
-            photosListDiv.innerHTML = recentPhotos.slice(0, 6).map(photo => `
-                <div class="photo-item">
-                    <div class="photo-info">
-                        <p><strong>File Name:</strong> ${photo.fileName}</p>
-                        <p><strong>Upload Date:</strong> ${formatDate(photo.uploadTimestamp)}</p>
-                        <p><strong>ID:</strong> ${photo.photoId}</p>
-                        <button onclick="getPhoto('${photo.photoId}')">View Photo</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-        
-        // Function to get photo by ID (for recent photos list)
-        function getPhoto(photoId) {
-            document.getElementById('photoId').value = photoId;
-            getPhotoBtn.click();
-        }
-        
-        // Initialize
-        updateRecentPhotos();
+        // Initial load
+        refreshPhotoList();
     </script>
 </body>
 </html>
