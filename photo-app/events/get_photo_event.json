@@ -1,0 +1,21 @@
+{
+  "resource": "/photos/{photoId}",
+  "path": "/photos/test-photo-id",
+  "httpMethod": "GET",
+  "isBase64Encoded": false,
+  "queryStringParameters": null,
+  "pathParameters": {
+    "photoId": "test-photo-id"
+  },
+  "stageVariables": null,
+  "headers": {
+    "Accept": "application/json"
+  },
+  "requestContext": {
+    "resourceId": "123456",
+    "resourcePath": "/photos/{photoId}",
+    "httpMethod": "GET",
+    "path": "/photos/test-photo-id",
+    "stage": "dev"
+  }
+}

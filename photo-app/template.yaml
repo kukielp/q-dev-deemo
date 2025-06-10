@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Photo Application
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, test, prod)
+    
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        PHOTOS_TABLE: !Ref PhotosTable
+        PHOTOS_BUCKET: !Ref PhotosBucket
+        URL_EXPIRATION: 3600
+
+Resources:
+  # API Gateway HTTP API
+  PhotosApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  # S3 Bucket for Photos
+  PhotosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "serverless-photos-${AWS::AccountId}-${Stage}"
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldObjects
+            Status: Enabled
+            ExpirationInDays: 365  # Optional: delete photos after 1 year
+
+  # DynamoDB Table for Photo Metadata
+  PhotosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "photos-${Stage}"
+      BillingMode: PAY_PER_REQUEST  # On-demand capacity
+      AttributeDefinitions:
+        - AttributeName: photoId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: photoId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true  # Enable server-side encryption
+
+  # Lambda Function for Uploading Photos
+  UploadPhotoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/upload_photo/
+      Handler: app.lambda_handler
+      Description: Uploads photos to S3 and stores metadata in DynamoDB
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref PhotosBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhotosTable
+      Events:
+        UploadPhoto:
+          Type: HttpApi
+          Properties:
+            Path: /photos
+            Method: POST
+            ApiId: !Ref PhotosApi
+
+  # Lambda Function for Getting Photos
+  GetPhotoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/get_photo/
+      Handler: app.lambda_handler
+      Description: Retrieves photo metadata and generates pre-signed URLs
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref PhotosBucket
+        - DynamoDBReadPolicy:
+            TableName: !Ref PhotosTable
+      Events:
+        GetPhoto:
+          Type: HttpApi
+          Properties:
+            Path: /photos/{photoId}
+            Method: GET
+            ApiId: !Ref PhotosApi
+
+Outputs:
+  PhotosApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${PhotosApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  
+  PhotosBucketName:
+    Description: S3 bucket for photos
+    Value: !Ref PhotosBucket
+  
+  PhotosTableName:
+    Description: DynamoDB table for photo metadata
+    Value: !Ref PhotosTable

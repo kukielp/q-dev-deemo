@@ -1,0 +1,21 @@
+{
+  "body": "{\"image\":\"SGVsbG8gV29ybGQ=\",\"fileName\":\"test-image.jpg\"}",
+  "resource": "/photos",
+  "path": "/photos",
+  "httpMethod": "POST",
+  "isBase64Encoded": false,
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+  },
+  "requestContext": {
+    "resourceId": "123456",
+    "resourcePath": "/photos",
+    "httpMethod": "POST",
+    "path": "/photos",
+    "stage": "dev"
+  }
+}
